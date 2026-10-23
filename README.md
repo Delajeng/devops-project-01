@@ -36,7 +36,7 @@ GitHub Actions (free, cloud-hosted runner)
 ---
 ## Prerequisites
 
-- Git installed and a GitHub account
+- Git installed and a GitHub/Gitlab account
 - Docker Desktop installed (Windows/Mac) or Docker Engine (Linux)
 - A text editor (VS Code recommended)
 - A Docker Hub account (free) — https://hub.docker.com
