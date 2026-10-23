@@ -13,6 +13,10 @@ COPY --from=builder /install /usr/local
 
 COPY app/ .
 
+# Version reported by /health. CI passes the commit SHA; local builds default to "dev".
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 USER appuser
 
 EXPOSE 8080

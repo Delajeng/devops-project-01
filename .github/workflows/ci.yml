@@ -21,29 +21,50 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Build once and load the image into the runner's Docker so it can be tested.
+      # Nothing is pushed yet, so this step is the same for pushes and pull requests.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Start the container and check /health answers with the commit it was built from.
+      - name: Smoke test — run container and hit health endpoint
+        run: |
+          docker run -d -p 8080:8080 --name test-container ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          sleep 5
+          curl --fail --silent http://localhost:8080/health | tee health.json
+          echo
+          jq -e --arg v "${{ github.sha }}" '.status == "ok" and .version == $v' health.json
+
+      - name: Show container logs if the test failed
+        if: failure()
+        run: docker logs test-container || true
+
+      # Only a tested build from main reaches Docker Hub.
       - name: Log in to Docker Hub
-        # Only runs on push to main, not on pull requests
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build image (and push on main branch)
+      # Same inputs as the build step, so every layer comes from the cache.
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          push: true
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            APP_VERSION=${{ github.sha }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Smoke test — run container and hit health endpoint
-        run: |
-          docker run -d -p 8080:8080 --name test-container ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          sleep 5
-          curl --fail http://localhost:8080/health
-          docker stop test-container
-          docker rm test-container
